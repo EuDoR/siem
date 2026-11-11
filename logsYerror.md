@@ -1,44 +1,28 @@
-$ az vm list-skus --location northcentralus --size Standard_B --all --output table
-ResourceType     Locations       Name                Zones    Restrictions
----------------  --------------  ------------------  -------  ----------------------------------------------------------------------
-virtualMachines  northcentralus  Standard_B12ms               NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B16als_v2           None
-virtualMachines  northcentralus  Standard_B16as_v2            None
-virtualMachines  northcentralus  Standard_B16ls_v2            NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B16ms               NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B16pls_v2           None
-virtualMachines  northcentralus  Standard_B16ps_v2            None
-virtualMachines  northcentralus  Standard_B16s_v2             NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B1ls                NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B1ms                NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B1s                 NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B20ms               NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B2als_v2            None
-virtualMachines  northcentralus  Standard_B2as_v2             None
-virtualMachines  northcentralus  Standard_B2ats_v2            None
-virtualMachines  northcentralus  Standard_B2ls_v2             NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B2ms                NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B2pls_v2            None
-virtualMachines  northcentralus  Standard_B2ps_v2             None
-virtualMachines  northcentralus  Standard_B2pts_v2            None
-virtualMachines  northcentralus  Standard_B2s                 NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B2s_v2              NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B2ts_v2             NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B32als_v2           None
-virtualMachines  northcentralus  Standard_B32as_v2            None
-virtualMachines  northcentralus  Standard_B32ls_v2            NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B32s_v2             NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B4als_v2            None
-virtualMachines  northcentralus  Standard_B4as_v2             None
-virtualMachines  northcentralus  Standard_B4ls_v2             NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B4ms                NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B4pls_v2            None
-virtualMachines  northcentralus  Standard_B4ps_v2             None
-virtualMachines  northcentralus  Standard_B4s_v2              NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B8als_v2            None
-virtualMachines  northcentralus  Standard_B8as_v2             None
-virtualMachines  northcentralus  Standard_B8ls_v2             NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B8ms                NotAvailableForSubscription, type: Location, locations: northcentralus
-virtualMachines  northcentralus  Standard_B8pls_v2            None
-virtualMachines  northcentralus  Standard_B8ps_v2             None
-virtualMachines  northcentralus  Standard_B8s_v2              NotAvailableForSubscription, type: Location, locations: northcentralus
+$ az vm run-command invoke \
+  --resource-group "rg-siem" \
+  --name "vm-siem-linux" \
+  --command-id RunShellScript \
+  --scripts 'echo "=== Procesos AMA ==="; ps -eo user,group,args | grep -E "[m]dsd|[f]luent-bit"; echo "=== Permisos de la ruta ==="; namei -l /var/log/nginx/access.log; echo "=== Ruta en configuracion ==="; grep -lF "/var/log/nginx/access.log" /etc/opt/microsoft/azuremonitoragent/config-cache/configchunks/* || echo "No se encontro la ruta literal"; echo "=== Errores recientes de AMA ==="; tail -n 20 /var/opt/microsoft/azuremonitoragent/log/mdsd.err' \
+  --query "value[].message" \
+  --output tsv
+Enable succeeded: 
+[stdout]
+=== Procesos AMA ===
+syslog   syslog   /opt/microsoft/azuremonitoragent/bin/mdsd -A -R -c /etc/opt/microsoft/azuremonitoragent/mdsd.xml -r /run/azuremonitoragent/default -S /var/opt/microsoft/azuremonitoragent/eh -L /var/opt/microsoft/azuremonitoragent/events
+root     root     /opt/microsoft/azuremonitoragent/bin/agentlauncher --fluentBitPath /opt/microsoft/azuremonitoragent/bin/fluent-bit --agentLauncherLogFilePath /var/opt/microsoft/azuremonitoragent/log/agentlauncher.log --agentLauncherStateFilePath /var/opt/microsoft/azuremonitoragent/log/agentlauncher.state.log
+root     root     /opt/microsoft/azuremonitoragent/bin/fluent-bit -c /etc/opt/microsoft/azuremonitoragent/config-cache/fluentbit/td-agent.conf
+=== Permisos de la ruta ===
+f: /var/log/nginx/access.log
+drwxr-xr-x root     root   /
+drwxr-xr-x root     root   var
+drwxrwxr-x root     syslog log
+drwxr-xr-x root     adm    nginx
+-rw-r----- www-data adm    access.log
+=== Ruta en configuracion ===
+/etc/opt/microsoft/azuremonitoragent/config-cache/configchunks/16846885047486866107.json
+=== Errores recientes de AMA ===
+2026-11-11T17:16:50.0933770Z: [DAEMON] Parent process 2151 exit. child process id=2192
+2026-11-11T17:16:50.0951730Z: [DAEMON] START mdsd daemon ver(1.45.1) pid(2192) uid(104) gid (111)
+
+
+[stderr]

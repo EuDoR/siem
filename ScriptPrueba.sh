@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Requisitos: Azure CLI instalado, sesion iniciada con "az login" y permisos
 # para crear y eliminar recursos.
-# Crear VM y Log Analytics: bash ScriptPrueba.sh create
+# Crear VM con Nginx y Log Analytics: bash ScriptPrueba.sh create
 # Crear VM y Event Hubs: bash ScriptPrueba.sh create --event-hub
 # Crear ambos: bash ScriptPrueba.sh create --log-analytics --event-hub
 # El namespace debe ser unico globalmente. Si ya existe, cambia su nombre:
@@ -34,15 +34,16 @@ EVENTHUB_NAME="${EVENTHUB_NAME:-eh-siem}"
 usage() {
     printf '%-58s | %s\n' "Comando" "Resultado"
     printf '%-58s-+-%s\n' "----------------------------------------------------------" "-----------------------------------------------------------"
-    printf '%-58s | %s\n' "./ScriptPrueba.sh create" "Crea la VM y Log Analytics."
-    printf '%-58s | %s\n' "./ScriptPrueba.sh create --log-analytics" "Crea la VM y Log Analytics."
-    printf '%-58s | %s\n' "./ScriptPrueba.sh create --event-hub" "Crea la VM y Event Hubs."
-    printf '%-58s | %s\n' "./ScriptPrueba.sh create --log-analytics --event-hub" "Crea la VM, Log Analytics y Event Hubs."
+    printf '%-58s | %s\n' "./ScriptPrueba.sh create" "Crea la VM con Nginx y Log Analytics."
+    printf '%-58s | %s\n' "./ScriptPrueba.sh create --log-analytics" "Crea la VM con Nginx y Log Analytics."
+    printf '%-58s | %s\n' "./ScriptPrueba.sh create --event-hub" "Crea la VM con Nginx y Event Hubs."
+    printf '%-58s | %s\n' "./ScriptPrueba.sh create --log-analytics --event-hub" "Crea la VM con Nginx, Log Analytics y Event Hubs."
     printf '%-58s | %s\n' "./ScriptPrueba.sh regions" "Consulta regiones y politicas de la suscripcion."
     printf '%-58s | %s\n' "./ScriptPrueba.sh destroy" "Elimina el grupo y TODOS sus recursos, previa confirmacion."
     printf '%-58s | %s\n' "./ScriptPrueba.sh --help" "Muestra esta ayuda."
     echo
-    echo "Si la VM ya existe, se reutiliza sin modificarla."
+    echo "Nginx se instala o verifica en la VM y se genera una solicitud local de prueba."
+    echo "Log Analytics no recopila automaticamente los logs de Nginx; configura AMA y una DCR para /var/log/nginx/access.log."
     echo "Los recursos no configuran automaticamente el envio de logs."
     echo "Event Hubs Basic genera cargos aun sin eventos."
     echo "Namespace de Event Hubs: $EVENTHUB_NAMESPACE (debe ser unico globalmente)."
@@ -124,8 +125,20 @@ if [ "$ACTION" = regions ]; then
 fi
 
 if [ "$ACTION" = destroy ]; then
-    echo "ADVERTENCIA: se eliminara el grupo '$RESOURCE_GROUP' y TODOS sus recursos, incluso los no creados por este script." >&2
-    printf "Escribe el nombre del grupo para confirmar: " >&2
+    group_exists=$(az group exists --name "$RESOURCE_GROUP" --output tsv)
+    if [ "$group_exists" != true ]; then
+        echo "Error: el grupo '$RESOURCE_GROUP' no existe en la suscripcion seleccionada." >&2
+        exit 1
+    fi
+
+    echo "Grupo de recursos que se eliminara: $RESOURCE_GROUP" >&2
+    echo "Recursos que contiene:" >&2
+    az resource list \
+        --resource-group "$RESOURCE_GROUP" \
+        --query '[].{nombre:name,tipo:type}' \
+        --output table
+    echo "ADVERTENCIA: se eliminara '$RESOURCE_GROUP' y TODOS sus recursos, incluso los no creados por este script." >&2
+    printf "Escribe exactamente '%s' para confirmar: " "$RESOURCE_GROUP" >&2
     if ! IFS= read -r confirmation; then
         echo "Error: no se recibio la confirmacion. No se elimino ningun recurso." >&2
         exit 1
@@ -176,6 +189,26 @@ else
         --output none
 fi
 
+echo "Instalando/verificando Nginx y generando una solicitud local de prueba..."
+if ! nginx_result=$(az vm run-command invoke \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$VM_NAME" \
+    --command-id RunShellScript \
+    --scripts 'set -e; apt-get update; DEBIAN_FRONTEND=noninteractive apt-get install -y nginx curl; systemctl enable --now nginx; systemctl is-active --quiet nginx; curl --fail --silent --show-error --max-time 10 --output /dev/null "http://127.0.0.1/?prueba-siem=instalacion"; test -s /var/log/nginx/access.log; printf "\nSIEM_NGINX_INSTALADO_OK\n"' \
+    --query 'value[].message' \
+    --output tsv); then
+    echo "Error: Azure Run Command fallo. La VM y otros recursos existentes permanecen en '$RESOURCE_GROUP'." >&2
+    exit 1
+fi
+
+if ! printf '%s\n' "$nginx_result" | grep -Fxq 'SIEM_NGINX_INSTALADO_OK'; then
+    echo "Error: no se pudo confirmar la instalacion y prueba de Nginx en la VM." >&2
+    printf '%s\n' "$nginx_result" >&2
+    echo "La VM y otros recursos existentes permanecen en '$RESOURCE_GROUP'." >&2
+    exit 1
+fi
+echo "Nginx esta activo y la solicitud de prueba fue registrada en /var/log/nginx/access.log."
+
 if [ "$CREATE_LOG_ANALYTICS" = true ]; then
     workspace_names=$(az monitor log-analytics workspace list --resource-group "$RESOURCE_GROUP" --query '[].name' --output tsv)
     if printf '%s\n' "$workspace_names" | grep -Fxq -- "$WORKSPACE_NAME"; then
@@ -222,6 +255,7 @@ if [ "$CREATE_EVENT_HUB" = true ]; then
 fi
 
 echo "Recursos creados:"
+echo "Grupo de recursos: $RESOURCE_GROUP"
 az vm show \
     --resource-group "$RESOURCE_GROUP" \
     --name "$VM_NAME" \
@@ -234,7 +268,7 @@ if [ "$CREATE_LOG_ANALYTICS" = true ]; then
         --workspace-name "$WORKSPACE_NAME" \
         --query '{workspace:name,id:id}' \
         --output table
-    echo "Log Analytics no recibe logs automaticamente: configura AMA y una DCR."
+    echo "Log Analytics no recibe logs automaticamente: configura AMA y una DCR para /var/log/nginx/access.log."
 fi
 if [ "$CREATE_EVENT_HUB" = true ]; then
     az eventhubs eventhub show \
