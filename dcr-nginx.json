@@ -1,0 +1,67 @@
+{
+  "location": "northcentralus",
+  "kind": "Linux",
+  "properties": {
+    "streamDeclarations": {
+      "Custom-NginxText": {
+        "columns": [
+          {
+            "name": "TimeGenerated",
+            "type": "datetime"
+          },
+          {
+            "name": "RawData",
+            "type": "string"
+          },
+          {
+            "name": "FilePath",
+            "type": "string"
+          },
+          {
+            "name": "Computer",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "dataSources": {
+      "logFiles": [
+        {
+          "name": "nginx-access",
+          "streams": [
+            "Custom-NginxText"
+          ],
+          "filePatterns": [
+            "/var/log/nginx/access.log"
+          ],
+          "format": "text",
+          "settings": {
+            "text": {
+              "recordStartTimestampFormat": "ISO 8601"
+            }
+          }
+        }
+      ]
+    },
+    "destinations": {
+      "logAnalytics": [
+        {
+          "name": "destino",
+          "workspaceResourceId": "/subscriptions/725cc3de-3af7-492a-a760-300981b7ec0f/resourceGroups/rg-siem/providers/Microsoft.OperationalInsights/workspaces/law-siem2"
+        }
+      ]
+    },
+    "dataFlows": [
+      {
+        "streams": [
+          "Custom-NginxText"
+        ],
+        "destinations": [
+          "destino"
+        ],
+        "transformKql": "source",
+        "outputStream": "Custom-NginxAccess_CL"
+      }
+    ]
+  }
+}

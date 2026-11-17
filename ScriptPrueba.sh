@@ -27,7 +27,7 @@ VM_NAME="${VM_NAME:-vm-siem-linux}"
 VM_SIZE="${VM_SIZE:-Standard_B2ats_v2}"
 VM_IMAGE="${VM_IMAGE:-Ubuntu2204}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-azureuser}"
-WORKSPACE_NAME="${WORKSPACE_NAME:-law-siem}"
+WORKSPACE_NAME="${WORKSPACE_NAME:-law-siem2}"
 EVENTHUB_NAMESPACE="${EVENTHUB_NAMESPACE:-ns-siem-artifactory-lab}"
 EVENTHUB_NAME="${EVENTHUB_NAME:-eh-siem}"
 

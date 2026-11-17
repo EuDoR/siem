@@ -1,6 +1,8 @@
 [
   {
-    "TimeGenerated": "2026-11-11T12:00:00Z",
-    "RawData": "Ejemplo de registro de acceso de Nginx"
+    "TimeGenerated": "2026-11-13T17:00:00Z",
+    "RawData": "Ejemplo de acceso Nginx",
+    "FilePath": "/var/log/nginx/access.log",
+    "Computer": "vm-siem-linux"
   }
 ]
